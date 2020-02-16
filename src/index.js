@@ -90,48 +90,53 @@ class EventBus {
     }
 }
 
-class Rendered {
+class Renderer {
     constructor(options) {
-        this.options = options;
+        // helper variables
+        this.isDisplayed = false;
+        this.isTooltipDisplayed = false;
+        this.finishTimeout = null;
+        this.text = '';
+        this.options = {
+            ...options,
+            mainColor: options.mainColor.includes('#') ? hexToRgb(options.mainColor) : options.mainColor,
+            secondaryColor: options.secondaryColor.includes('#') ? hexToRgb(options.secondaryColor) : options.secondaryColor,
+        };
 
+        // setup and append canvas
         const canvas = document.createElement('canvas');
         canvas.style.cssText = `position: fixed; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; display: block; width: 100%; height: 100%;`;
-
-        this.isDisplayed = false;
         this.canvas = canvas;
         this.context = canvas.getContext('2d');
+        document.body.appendChild(canvas);
 
+        // trigger positioning
+        this.onWindowResize();
+
+        // setup kinet instance for animating
         this.kinet = new Kinet({
-            names: ["x1", "y1", "x2", "y2", "opacity"],
+            names: ["x1", "y1", "x2", "y2", "opacity", "tooltipOpacity", "triangleOpacity", "triangleDistort"],
             acceleration: 0.1,
             friction: 0.35
         });
-        this.finishTimeout = null;
-
-        document.body.appendChild(canvas);
 
         this.kinet.on('tick', (instances) => {
             this.context.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
             this.drawDot(instances.x2.current, instances.y2.current, instances.opacity.current);
-            this.drawLine(instances.x1.current, instances.y1.current, instances.x2.current, instances.y2.current, instances.opacity.current);
+            if (this.options.simpleLine) {
+                this.drawLine(instances.x1.current, instances.y1.current, instances.x2.current, instances.y2.current, instances.opacity.current);
+            } else {
+                this.drawTriangle(instances.x1.current, instances.y1.current, instances.x2.current, instances.y2.current, instances.triangleOpacity.current, instances.triangleDistort.current);
+            }
             this.drawCircles(instances.x1.current, instances.y1.current, instances.opacity.current);
-            this.drawTooltip(instances.x2.current, instances.y2.current, instances.opacity.current);
+            this.drawTooltip(instances.x2.current, instances.y2.current, instances.tooltipOpacity.current);
         });
 
-        this.text = '';
+        this.kinet.set('triangleDistort', 26);
 
+        // attach global listeners
         window.addEventListener('resize', this.onWindowResize);
-        this.onWindowResize();
-    }
-
-    destroy = () => {
-        window.removeEventListener('resize', this.onWindowResize);
-        this.kinet.off();
-        this.text = '';
-        this.kinet = null;
-        this.canvas.outerHTML = '';
-        this.canvas = null;
     }
 
     show() {
@@ -140,11 +145,22 @@ class Rendered {
         this.kinet.animate('opacity', 100);
     }
 
+    showTooltip() {
+        this.isTooltipDisplayed = true;
+        this.kinet.animate('tooltipOpacity', 100);
+        this.kinet.animate('triangleOpacity', 100);
+        // setTimeout(() => {
+        // }, 60);
+    }
+
     hide() {
         clearTimeout(this.finishTimeout);
         this.finishTimeout = setTimeout(() => {
             this.isDisplayed = false;
             this.kinet.animate('opacity', 0);
+            this.kinet.animate('tooltipOpacity', 0);
+            this.kinet.set('triangleOpacity', 0);
+            this.kinet.set('triangleDistort', 24);
         }, 400);
     }
 
@@ -155,8 +171,10 @@ class Rendered {
     }
 
     animateToPosition(x, y) {
-        this.kinet.animate('x1', x);
-        this.kinet.animate('y1', y);
+        if (this.isDisplayed) {
+            this.kinet.animate('x1', x);
+            this.kinet.animate('y1', y);
+        }
     }
 
     setCursorPosition = (x, y) => {
@@ -175,8 +193,8 @@ class Rendered {
         context.beginPath();
         context.arc(x, y, Math.max(a/6, 0), 0, 2 * Math.PI, false);
         const grad = context.createLinearGradient(0, 0, 10, 10);
-        grad.addColorStop(0, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a-10)/100})`);
-        grad.addColorStop(1, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a-10)/100})`);
+        grad.addColorStop(0, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a)/100})`);
+        grad.addColorStop(1, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a)/100})`);
         context.fillStyle = grad;
         context.fill();
         context.closePath();
@@ -184,8 +202,8 @@ class Rendered {
         context.beginPath();
         context.arc(x, y, Math.max(a/27, 0), 0, 2 * Math.PI, false);
         const grad2 = context.createLinearGradient(0, 0, 10, 10);
-        grad2.addColorStop(0, `rgba(${secondaryColor.r}, ${secondaryColor.g}, ${secondaryColor.b}, ${(a-10)/100})`);
-        grad2.addColorStop(1, `rgba(${secondaryColor.r}, ${secondaryColor.g}, ${secondaryColor.b}, ${(a-10)/100})`);
+        grad2.addColorStop(0, `rgba(${secondaryColor.r}, ${secondaryColor.g}, ${secondaryColor.b}, ${(a)/100})`);
+        grad2.addColorStop(1, `rgba(${secondaryColor.r}, ${secondaryColor.g}, ${secondaryColor.b}, ${(a)/100})`);
         context.fillStyle = grad2;
         context.fill();
     }
@@ -198,8 +216,8 @@ class Rendered {
         context.arc(x, y, 4, 0, 2 * Math.PI, false);
 
         const grad = context.createLinearGradient(0, 0, 10, 10);
-        grad.addColorStop(0, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a-10)/100})`);
-        grad.addColorStop(1, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a-10)/100})`);
+        grad.addColorStop(0, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a)/100})`);
+        grad.addColorStop(1, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a)/100})`);
         context.fillStyle = grad;
 
         context.fill();
@@ -208,14 +226,12 @@ class Rendered {
     drawLine = (x1, y1, x2, y2, a) => {
         const context = this.context;
         const { mainColor } = this.options;
-        const angle = Math.atan2((y1 - y2), (x1 - x2)) * 180 / Math.PI;
-        console.log(angle);
 
         context.beginPath();
         // context.moveTo(30 * Math.cos(angle) + x1, 30 * Math.sin(angle) + y1);
         context.moveTo(x1, y1);
         context.lineTo(x2, y2);
-        context.strokeStyle = `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, 0.7)`;
+        context.strokeStyle = `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${a/100})`;
         context.lineWidth = 3;
         context.stroke();
 
@@ -223,19 +239,54 @@ class Rendered {
         context.shadowBlur = 2;
     }
 
-    drawTooltip = (x, y, a) => {
+    drawTriangle = (x1, y1, x2, y2, a, distort) => {
         const context = this.context;
+        const { mainColor } = this.options;
+
+        const distance = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+        const angle = Math.atan2((y1 - y2), (x1 - x2)) - Math.PI / 2;
+        const scale = a/100;
+
+        if (distance > 80) {
+            this.kinet.animate('triangleDistort', 34);
+        } else {
+            this.kinet.animate('triangleDistort', 26);
+        }
+
+        context.save();
+        context.translate(x2,y2);
+        context.rotate(angle);
+
+        context.beginPath();
+        context.moveTo(1.5, 0);
+        context.bezierCurveTo(2, distance/4, -4, distance - distort, 14 * scale, distance - 9);
+        context.lineTo(-14 * scale, distance - 9);
+        context.bezierCurveTo( 4, distance - distort,-2, distance/4, -1.5, 0);
+
+        context.fillStyle = `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, ${(a)/100})`;
+        context.fill();
+        context.shadowBlur = 2;
+        context.restore();
+    }
+
+    drawTooltip = (x, y, a) => {
+        const padding = 6;
+        const movedByX = 9;
+        const movedByY = 13;
+        const minWidth = 26;
+
+        const context = this.context;
+        const textWidth = context.measureText(this.text).width;
+        const width = Math.max( textWidth, minWidth);
 
         context.lineWidth = 4;
-        roundRect(context, x + 9, y - 26, 40, 19, 3, a);
-        context.textAlign = 'center';
+        roundRect(context, x + movedByX, y - movedByY * 2,  width + padding * 2, 19, 3, a);
+        context.textAlign = 'left';
         context.font = `normal ${ this.options.fontSize }px ${ this.options.font }`;
         context.textBaseline = 'left';
         context.fillStyle = `rgba(255, 255, 255, ${a / 100})`;
 
-        const rectX = 29;
-        const rectY = -13;
-        context.fillText(this.text,x + rectX,y + rectY);
+        context.fillText(this.text,x + movedByX + padding + (width / 2) - (textWidth / 2),y - movedByY);
     }
 
     onWindowResize = () => {
@@ -243,167 +294,242 @@ class Rendered {
         this.canvas.height = window.innerHeight * 2;
         this.context.scale(2,2);
     }
+
+    destroy() {
+        window.removeEventListener('resize', this.onWindowResize);
+        this.kinet.off();
+
+        this.text = '';
+        this.kinet = null;
+        this.canvas.outerHTML = '';
+        this.canvas = null;
+    }
 }
 
-class Rewind {
-    constructor(element, options) {
+class Dragger {
+    constructor(options) {
+        // merge options
         const defaults = {
             font: 'Arial',
             fontSize: 11,
             mainColor: '#E50914',
             secondaryColor: '#ffffff',
+            element: document.body,
+            simpleLine: false,
+            onDrag: (distance, absoluteDistance, direction, event) => {
+                // returned value will be displayed in tooltip
+                return direction;
+            },
+            onDragStart: (event) => {},
+            onDragEnd: (event) => {},
+            onClick: (event) => {},
         };
 
         this.options = {
             ...defaults,
             ...options,
         };
-        this.element = element;
 
-        this.pressedPosition = null;
-        this.volumeSpeed = this.element.offsetHeight * 0.4;
-        this.timeSpeed = 0.01;
-        this.cursor = new Rendered({
-            font: this.options.font,
-            fontSize: this.options.fontSize,
-            mainColor: hexToRgb(this.options.mainColor),
-            secondaryColor: hexToRgb(this.options.secondaryColor),
-        });
+        this.element = this.options.element;
 
-        this.eventbus = new EventBus();
-        this.on = this.eventbus.on;
-        this.off = this.eventbus.off;
-        this.once = this.eventbus.once;
+        // init renderer
+        this.renderer = new Renderer(this.options);
 
+        // setup listeners
         this.element.addEventListener('mousedown', this.onMouseDown);
         this.element.addEventListener('click', this.onClick);
         window.addEventListener('mousemove', this.onMouseMove);
         window.addEventListener('mouseup', this.onMouseUp);
-
-        this.element.addEventListener("loadedmetadata", this.onVideoLoaded);
-    }
-
-    destroy = () => {
-        this.element.removeEventListener('mousedown', this.onMouseDown);
-        this.element.removeEventListener('click', this.onClick);
-        window.removeEventListener('mousemove', this.onMouseMove);
-        window.removeEventListener('mouseup', this.onMouseUp);
-
-        this.element.removeEventListener("loadedmetadata", this.onVideoLoaded);
-
-        this.cursor = null;
-        this.eventbus.off();
-        this.eventbus = null;
-    }
-
-    onVideoLoaded = () => {
-        this.volumeSpeed = this.element.offsetHeight * 0.4;
-        this.timeSpeed = 0.1 / this.element.duration;
     }
 
     onMouseDown = event => {
-        this.startVolume = parseInt(this.element.volume * 100);
-        this.startTime = parseInt(this.element.currentTime);
+        this.options.onDragStart(event);
 
-        this.cursor.setCursorPosition(event.clientX, event.clientY);
-        this.cursor.setPosition(event.clientX, event.clientY);
+        this.renderer.setCursorPosition(event.clientX, event.clientY);
+        this.renderer.setPosition(event.clientX, event.clientY);
 
         this.pressedPosition = {
             x: event.clientX,
             y: event.clientY,
         };
 
-        this.cursor.show();
+        this.renderer.show();
     }
 
     onMouseUp = event => {
-        if (this.currentlyAdjusting === 'time') {
-            this.element.currentTime = this.currentTime;
-            this.eventbus.emit('timeChange', { currentTime: this.currentTime });
-        }
+        this.options.onDragEnd(event);
 
         this.pressedPosition = null;
-        this.currentTime = null;
-        this.angle = null;
-        this.startVolume = null;
-        this.startTime = null;
         this.currentlyAdjusting = null;
 
-        this.cursor.animateToPosition(event.clientX, event.clientY);
-        this.cursor.hide();
-
-        //document.body.style.cursor = '';
+        this.renderer.animateToPosition(event.clientX, event.clientY);
+        this.renderer.hide();
     }
 
     onClick = event => {
         this.pressedPosition = null;
-        if (this.distance > 3) {
-            event.preventDefault();
-        }
-        this.distance = 0;
+        this.options.onClick(event);
     }
 
-    onMouseMove = () => {
+    onMouseMove = event => {
         if (this.pressedPosition) {
-            this.distance = Math.sqrt(Math.pow(this.pressedPosition.x - event.clientX, 2) + Math.pow(this.pressedPosition.y - event.clientY, 2));
-            this.angle = Math.atan2((this.pressedPosition.y - event.clientY), (this.pressedPosition.x - event.clientX)) * 180 / Math.PI;
+            const distance = Math.sqrt(Math.pow(this.pressedPosition.x - event.clientX, 2) + Math.pow(this.pressedPosition.y - event.clientY, 2));
+            const angle = Math.atan2((this.pressedPosition.y - event.clientY), (this.pressedPosition.x - event.clientX)) * 180 / Math.PI;
 
-            if (!this.currentlyAdjusting && this.distance > 3) {
-                if (this.angle <= 45 && this.angle >= 0 || this.angle >= -45 && this.angle <= 0 || this.angle >= 135 || this.angle <= -135) {
-                    this.currentlyAdjusting = "time";
-                } else {
-                    this.currentlyAdjusting = "volume";
+            if (!this.currentlyAdjusting) {
+                if (distance > 3) {
+                    // save the direction we are currently adjusting
+                    if (angle <= 45 && angle >= 0 || angle >= -45 && angle <= 0 || angle >= 135 || angle <= -135) {
+                        this.currentlyAdjusting = "x";
+                    } else {
+                        this.currentlyAdjusting = "y";
+                    }
                 }
             } else {
-                //document.body.style.cursor = 'none';
-            }
+                this.renderer.showTooltip();
+                if (this.currentlyAdjusting === "x") {
+                    const distanceX = event.clientX - this.pressedPosition.x;
+                    const direction = distanceX > 0 ? 1 : -1;    // left/right
 
-            this.cursor.setCursorPosition(event.clientX, event.clientY);
-
-            if (this.currentlyAdjusting) {
-                if (this.currentlyAdjusting === "time") {
-                    const direction = (this.pressedPosition.x - event.clientX) < 0 ? 1 : -1;
-                    const time = parseInt(this.distance * this.timeSpeed * direction + this.startTime);
-                    let currentTime = null;
-
-                    if (time < 0) {
-                        currentTime = 0;
-                    } else if (time > this.element.duration) {
-                        currentTime = this.element.duration;
-                    } else {
-                        currentTime = time;
-                    }
-
-                    const timeString = toMMSS(currentTime);
-
-                    this.currentTime = currentTime;
-                    this.cursor.setTooltipContent(timeString);
-
-                    this.eventbus.emit('previewTimeChange', {currentTime, timeString});
+                    const text = this.options.onDrag(distanceX, distance * direction, this.currentlyAdjusting, event);
+                    this.renderer.setTooltipContent(text);
                 } else {
-                    const direction = (this.pressedPosition.y - event.clientY) > 0 ? 1 : -1;
-                    const volumeToSet = parseInt(this.startVolume + direction * this.distance / this.volumeSpeed * 100);
-                    let volume = null;
+                    const distanceY = event.clientY - this.pressedPosition.y;
+                    const direction = distanceY > 0 ? 1 : -1;    // up/down
 
-                    if (volumeToSet < 0) {
-                        volume = 0;
-                    } else if (volumeToSet > 100) {
-                        volume = 100;
-                    } else {
-                        volume = volumeToSet;
-                    }
-
-                    this.element.volume = volume / 100;
-                    this.cursor.setTooltipContent(volume);
-
-                    this.eventbus.emit('volumeChange', {volume});
+                    const tooltipText = this.options.onDrag(distanceY, distance * direction, this.currentlyAdjusting, event);
+                    this.renderer.setTooltipContent(tooltipText);
                 }
             }
+
+            this.renderer.setCursorPosition(event.clientX, event.clientY);
         }
+    }
+
+    destroy = () => {
+        this.renderer.destroy();
     }
 }
 
-window.Rewind = Rewind;
-const rewind = new Rewind(document.getElementById('video'));
+class Rewind {
+    constructor(element, options) {
+        this.isAdjusting = false;
 
-console.log(rewind);
+        // validate element
+
+        // options...
+        const defaults = {
+            // styles
+            // element
+
+            onTimeChange: () => {},
+            onPreviewTimeChange: () => {},
+            onVolumeChange: () => {},
+            cancelClickEvent: true,
+
+            volumeSpeed: 1,
+            timeSpeed: 0.01,
+        };
+
+        this.options = {
+            ...defaults,
+            ...options,
+        };
+
+        // set initial helper values
+        this.element = element;
+        this.startVolume = null;
+        this.startTime = null;
+
+        // dragger instance
+        this.dragger = new Dragger({
+            onDragStart: this.onDragStart,
+            onDragEnd: this.onDragEnd,
+            onDrag: this.onDrag,
+            onClick:
+                this.options.cancelClickEvent ?
+                    (event) => {
+                        if (this.isAdjusting) {
+                            event.preventDefault();
+                        }
+                    } : () => {}
+        });
+    }
+
+    onDragStart = () => {
+        this.startVolume = parseInt(this.element.volume * 100);
+        this.startTime = parseInt(this.element.currentTime);
+    }
+
+    onDragEnd = (event) => {
+        if (this.dragger.currentlyAdjusting === 'x') {
+            this.element.currentTime = this.currentTime;
+            this.options.onTimeChange({time: this.currentTime});
+        }
+
+        setTimeout(() => this.isAdjusting = false);
+        this.currentTime = null;
+        this.startVolume = null;
+        this.startTime = null;
+    }
+
+    onDrag = (distance, absoluteDistance, direction, event) => {
+        this.isAdjusting = true;
+
+        if (direction === "x") {
+            let currentTime = null;
+            const time = parseInt(distance * this.options.timeSpeed + this.startTime);
+
+            if (time < 0) {
+                currentTime = 0;
+            } else if (time > this.element.duration) {
+                currentTime = this.element.duration;
+            } else {
+                currentTime = time;
+            }
+
+            this.currentTime = currentTime;
+            this.options.onPreviewTimeChange({time: this.currentTime});
+
+            return toMMSS(currentTime);
+        } else {
+            let volume = null;
+            const volumeToSet = parseInt((this.startVolume) - distance * this.options.volumeSpeed / 2);
+
+            if (volumeToSet < 0) {
+                volume = 0;
+            } else if (volumeToSet > 100) {
+                volume = 100;
+            } else {
+                volume = volumeToSet;
+            }
+
+            this.element.volume = volume / 100;
+            this.options.onVolumeChange({volume});
+
+            return volume;
+        }
+    }
+
+    destroy = () => {
+        //
+    }
+}
+
+window.Dragger = Dragger;
+window.Rewind = Rewind;
+//const rewind = new Rewind(document.getElementById('video'));
+const dragger = new Rewind(document.getElementById('video'), {
+    onTimeChange: ({time}) => {
+        document.getElementById('video').currentTime = time;
+        console.log("onTimeChange", time);
+    },
+    onPreviewTimeChange: ({time}) => {
+        console.log("onPreviewTimeChange", time);
+    },
+    onVolumeChange: ({volume}) => {
+        console.log("onVolumeChange", volume);
+    },
+});
+
+console.log(dragger);

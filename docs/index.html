@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Rewind</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css?family=Raleway');
+
+        html, body {
+            background: #000;
+            margin: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Raleway, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif;
+            font-size: 15px;
+        }
+
+        .video {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        .description {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 400;
+            color: #fff;
+            text-align: center;
+            background: rgba(0, 0, 0, .4);
+            transition: .4s;
+            line-height: 1.8;
+            letter-spacing: 0.1px;
+        }
+
+        .description span {
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <video class="video" id="video" src="./video.mp4"></video>
+    <div class="description">
+        <div>
+            Drag left/right to rewind/fast forward <br>
+            <span>and</span> <br>
+            up/down to adjust volume
+        </div>
+    </div>
+    <script src="./Rewind.js"></script>
+    <script>
+        window.Rewind = Rewind;
+
+        const video = document.querySelector('#video');
+        const rewind = new Rewind(document.getElementById('video'), {
+            onTimeChange: ({time}) => {
+                document.getElementById('video').currentTime = time;
+                console.log("onTimeChange", time);
+            },
+            onPreviewTimeChange: ({time}) => {
+                console.log("onPreviewTimeChange", time);
+            },
+            onVolumeChange: ({volume}) => {
+                console.log("onVolumeChange", volume);
+            },
+            onClick: (isAdjusting) => {
+                if (!isAdjusting) {
+                    if (video.paused) {
+                        video.play();
+                    } else {
+                        video.pause();
+                    }
+                }
+            },
+            timeSpeed: 0.04,
+        });
+
+        console.log(rewind);
+    </script>
+</body>
+</html>
